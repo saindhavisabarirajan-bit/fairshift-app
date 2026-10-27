@@ -1,0 +1,17 @@
+import test from "node:test";import assert from "node:assert/strict";
+import {ORG,HR,add,seed,verify,calc,flags,groups} from "../src/core.js";
+const NOW=new Date(2026,9,27,12).getTime();
+test("untouched ledger verifies",()=>assert.equal(verify(seed(ORG.con,NOW)),-1));
+test("editing a past record breaks the chain",()=>{const d=seed(ORG.con,NOW);d.sh[3].e+=HR;assert.equal(verify(d),3)});
+test("overtime is paid at the sector multiplier",()=>{const g={cap:8,mult:2,ppl:[["a",100]]},d={sh:[]};add(d,0,0,10*HR);assert.deepEqual(calc(d,g,0),{reg:8,ot:2,rate:100,pay:1200})});
+test("fatigue rules flag long shifts and long streaks",()=>{const d=seed(ORG.con,NOW);assert.ok(flags(d,0).includes("Shift >12h"));assert.ok(flags(d,1).some(x=>x.includes("days in a row")))});
+test("short rest between shifts is flagged",()=>{const d={sh:[]};add(d,0,0,8*HR);add(d,0,13*HR,21*HR);assert.ok(flags(d,0).includes("Rest <10h"))});
+test("reports group by area and type",()=>{const g=groups(seed(ORG.con,NOW));assert.equal(g.length,1);assert.equal(g[0][1].x.length,2)});
+import {passport,encode,checkPassport} from "../src/core.js";
+const L=()=>({con:seed(ORG.con,NOW)});
+test("passport from an intact ledger verifies",()=>{const l=L(),c=encode(passport(l.con,ORG.con,0,"con")),r=checkPassport(c,l,ORG);assert.ok(r.ok);assert.equal(r.shifts,7)});
+test("passport with edited hours is rejected",()=>{const l=L(),p=passport(l.con,ORG.con,0,"con");p.r[0][2]+=5*HR;assert.equal(checkPassport(encode(p),l,ORG).ok,false)});
+test("passport is rejected if the employer ledger was altered",()=>{const l=L(),c=encode(passport(l.con,ORG.con,0,"con"));l.con.sh[0].e+=HR;assert.equal(checkPassport(c,l,ORG).ok,false)});
+test("garbage code is rejected",()=>assert.equal(checkPassport("zzz",L(),ORG).ok,false));
+import {heat} from "../src/core.js";
+test("heatmap has 7 days and shows the 13h shift",()=>{const h=heat(seed(ORG.con,NOW),0,NOW);assert.equal(h.length,7);assert.equal(Math.max(...h),13)});
